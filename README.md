@@ -1,2 +1,4 @@
 # libsharedmem
-a c/c++ shared memory utility
+a C. shared memory utility
+
+
