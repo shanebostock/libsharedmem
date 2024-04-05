@@ -10,65 +10,55 @@
 #include <sys/types.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
+#include <errno.h>
 
-#define KEY 1234565
+#define KEY 123456
 
-
-typedef struct packet {
-	int done;
-	int seq;
-	char msgbuf[64];
-} packet_s;
-
-size_t get_shm_size(){
-	return sizeof(packet_s)*10;
-} 
-//fix the variable name from shmsize to function call
 
 key_t get_key(){
 	return KEY;
 }
 
-int get_id_new(){
+int get_id_new(size_t shmem_size){
 	int shmid;
 	key_t key = get_key();
-	if((shmid = shmget(key,get_shm_size(),IPC_CREAT | 0666)) <0){
+	if((shmid = shmget(key,shmem_size,IPC_CREAT | 0666)) <0){
  		perror("shmid");
- 		exit(0);
+ 		exit(1);
  	}
  	return shmid;
 }
 
-int get_id(){
+int get_id(size_t shmem_size){
 	int shmid;
 	key_t key = get_key();
-	if((shmid = shmget(key,get_shm_size(),0666)) <0){
+	if((shmid = shmget(key,shmem_size,0666)) <0){
  		perror("shmget");
- 		exit(0);
+ 		exit(1);
  	}
  	return shmid;
 }
 
-packet_s* create_shared_memory(){
+void* create_shared_memory(size_t shmem_size){
 
-	int shmid = get_id_new();
-	packet_s *shm;
+	int shmid = get_id_new(shmem_size);
+	void *shm;
 	
-    if ((shm = (packet_s*) shmat(shmid, NULL, 0)) == (packet_s *) -1) {
+    if ( (shm = shmat(shmid, NULL, 0) ) == (void*) -1) {
         perror("shmat");
-        exit(0);
+        exit(1);
     }
     return shm;
 }
 
-packet_s* get_shared_memory(){
+void* get_shared_memory(size_t shmem_size){
 
-	int shmid = get_id();
-	packet_s *shm;
+	int shmid = get_id(shmem_size);
+	void *shm;
 	
-    if ((shm = (packet_s*) shmat(shmid, NULL, 0)) == (packet_s *) -1) {
+    if ((shm = shmat(shmid, NULL, 0)) == (void*) -1) {
         perror("shmat");
-        exit(0);
+        exit(1);
     }
     return shm;
 }
