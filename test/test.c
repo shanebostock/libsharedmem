@@ -150,6 +150,12 @@ void* read_packets(void *arg){
     pthread_exit(NULL);
 }
 
+
+/*
+This test case needs locks on the critical section and better synchronization. 
+
+The case passes sometimes and fails sometimes as their is a race condition b/w reader and writer
+*/
 int main(int argc, char** argv){
     void *tret;
     int32_t err;
