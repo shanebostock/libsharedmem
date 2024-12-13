@@ -11,47 +11,17 @@
 #include <sys/shm.h>
 #include <errno.h>
 
-#define KEY 123456
 
-key_t get_key(){
-	return KEY;
-}
+/**************************************************************/
+/*
 
-int get_id_new(size_t shmem_size){
-	int shmid;
-	key_t key = get_key();
-	if((shmid = shmget(key,shmem_size,IPC_CREAT | 0666)) <0){
- 		perror("shmid");
- 		exit(1);
- 	}
- 	return shmid;
-}
+The main entry points to the sharedmem library.
 
-int get_id(size_t shmem_size){
-	int shmid;
-	key_t key = get_key();
-	if((shmid = shmget(key,shmem_size,0666)) <0){
- 		perror("shmget");
- 		exit(1);
- 	}
- 	return shmid;
-}
+*/
+void* get_shared_memory(size_t shmem_size,int project_id){
 
-void* create_shared_memory(size_t shmem_size){
-
-	int shmid = get_id_new(shmem_size);
-	void *shm;
-	
-    if ( (shm = shmat(shmid, NULL, 0) ) == (void*) -1) {
-        perror("shmat");
-        exit(1);
-    }
-    return shm;
-}
-
-void* get_shared_memory(size_t shmem_size){
-
-	int shmid = get_id(shmem_size);
+	key_t project_key = get_key(project_id);
+	int shmid = get_id(shmem_size,project_key);
 	void *shm;
 	
     if ((shm = shmat(shmid, NULL, 0)) == (void*) -1) {
@@ -60,6 +30,50 @@ void* get_shared_memory(size_t shmem_size){
     }
     return shm;
 }
+
+void* create_shared_memory(size_t shmem_size, int project_id){
+	
+	key_t project_key = get_key(project_id);
+	int shmid = get_id_new(shmem_size,project_key);
+	void *shm;
+	
+    if ( (shm = shmat(shmid, NULL, 0) ) == (void*) -1) {
+        perror("shmat");
+        exit(1);
+    }
+    return shm;
+}
+/**************************************************************/
+
+key_t get_key(int project_id){
+
+	char buffer[PATH_BUFF_SIZE];
+    const char* p_buf = buffer;
+    readlink("/proc/self/exe", buffer, PATH_BUFF_SIZE); // gets file path of the calling proc
+
+	return ftok(p_buf,project_id);
+}
+
+int get_id_new(size_t shmem_size, key_t project_key){
+	int shmid;
+
+	if((shmid = shmget(project_key,shmem_size,IPC_CREAT | 0666)) <0){
+ 		perror("shmid");
+ 		exit(1);
+ 	}
+ 	return shmid;
+}
+
+int get_id(size_t shmem_size, key_t project_key){
+	int shmid;
+
+	if((shmid = shmget(project_key,shmem_size,0666)) <0){
+ 		perror("shmget");
+ 		exit(1);
+ 	}
+ 	return shmid;
+}
+
 
 void clear_shared_memory(void* shm, size_t shmem_size){
 	memset(shm,0,shmem_size);

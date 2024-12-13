@@ -7,9 +7,11 @@
 #include <pthread.h>
 #include <time.h>
 #include <errno.h>
+#include <unistd.h>
 
 #define BUFFERSIZE 3
 #define TESTSIZE 100
+#define RB_ID 1312
 
 typedef struct packet {
 	uint8_t done;
@@ -59,7 +61,7 @@ void generate_packet(packet_s *ptr, uint8_t seq){
 
 void* write_packets(void *arg){
     thread_data_s *wdata=(thread_data_s *)arg;
-    packet_s *pkt = get_shared_memory(get_size()); //start of shmem
+    packet_s *pkt = get_shared_memory(get_size(),RB_ID); //start of shmem
     packet_s *writer = pkt; // set writer to start of shmem
     uint32_t write_count = 0;
     uint32_t cont_count = 0;  
@@ -75,7 +77,7 @@ void* write_packets(void *arg){
             buf_pos = 0;
             writer = pkt;
         }
-
+        //aquire lock
         if(write_count < BUFFERSIZE){
             memcpy(writer,m_ptr,sizeof(packet_s));
             buf_pos++;
@@ -93,6 +95,7 @@ void* write_packets(void *arg){
             continue;
 
         }
+        // release lock
         
     }
     wdata->count=write_count;
@@ -103,7 +106,7 @@ void* write_packets(void *arg){
 
 void* read_packets(void *arg){
     thread_data_s *rdata=(thread_data_s *)arg;
-    packet_s *pkt = get_shared_memory(get_size());
+    packet_s *pkt = get_shared_memory(get_size(),RB_ID);
     packet_s *reader = pkt;
     packet_s msg;
     packet_s *m_ptr = &msg;
@@ -123,7 +126,7 @@ void* read_packets(void *arg){
             buf_pos = 0;
             reader = pkt;
         }
-
+        // aquire lock
         if(reader->done == 0){
             memcpy(m_ptr,reader,sizeof(packet_s));
             reader->done = 1;
@@ -136,6 +139,7 @@ void* read_packets(void *arg){
             cont_count++;
             continue;
         }
+        // release lock
         /* Do something with the data */
         if (test_packet(msg,prev_seq) ==1){
             err_count++;
@@ -162,7 +166,7 @@ int main(int argc, char** argv){
     pthread_t r_thread, w_thread;
     thread_data_s wdata,rdata;
 
-    void *shm = create_shared_memory(get_size());
+    void *shm = create_shared_memory(get_size(),RB_ID);
     clear_shared_memory(shm, get_size());
 
     err = pthread_create(&w_thread,NULL,write_packets,(void*)&wdata);
