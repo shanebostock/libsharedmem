@@ -20,6 +20,7 @@ typedef struct packet {
 typedef struct thread_data{
     uint32_t count;
     uint32_t err_count;
+    uint32_t cont_count;
 } thread_data_s;
 
 int32_t msleep(uint32_t ms){
@@ -58,9 +59,10 @@ void generate_packet(packet_s *ptr, uint8_t seq){
 
 void* write_packets(void *arg){
     thread_data_s *wdata=(thread_data_s *)arg;
-    packet_s *pkt = get_shared_memory(get_size());
-    packet_s *writer = pkt;
-    uint32_t write_count = 0;  
+    packet_s *pkt = get_shared_memory(get_size()); //start of shmem
+    packet_s *writer = pkt; // set writer to start of shmem
+    uint32_t write_count = 0;
+    uint32_t cont_count = 0;  
     uint8_t buf_pos = 0;
     packet_s msg;
     packet_s *m_ptr = &msg;
@@ -74,18 +76,27 @@ void* write_packets(void *arg){
             writer = pkt;
         }
 
-        if(write_count < BUFFERSIZE || writer->done == 1){
+        if(write_count < BUFFERSIZE){
+            memcpy(writer,m_ptr,sizeof(packet_s));
+            buf_pos++;
+            writer++;
+            write_count++;
+        }
+        else if(writer->done == 1){
             memcpy(writer,m_ptr,sizeof(packet_s));
             buf_pos++;
             writer++;
             write_count++;
         }
         else{
+            cont_count++;
             continue;
+
         }
         
     }
     wdata->count=write_count;
+    wdata->cont_count=cont_count;
     pthread_exit(NULL);
     
 }
@@ -135,6 +146,7 @@ void* read_packets(void *arg){
 
     rdata->count=read_count;
     rdata->err_count=err_count;
+    rdata->cont_count=cont_count;
     pthread_exit(NULL);
 }
 
@@ -144,7 +156,8 @@ int main(int argc, char** argv){
     pthread_t r_thread, w_thread;
     thread_data_s wdata,rdata;
 
-    create_shared_memory(get_size());
+    void *shm = create_shared_memory(get_size());
+    clear_shared_memory(shm, get_size());
 
     err = pthread_create(&w_thread,NULL,write_packets,(void*)&wdata);
     if (err !=0){
@@ -156,9 +169,9 @@ int main(int argc, char** argv){
     }
 
     err = pthread_join(w_thread,&tret);
-    printf("w_thread exited with code: %d, write count: %d\n",err,wdata.count);
+    printf("w_thread exited with code: %d, write count: %d cont_count: %d\n",err,wdata.count, wdata.cont_count);
     err = pthread_join(r_thread,&tret);
-    printf("r_thread exited with code: %d, read count: %d, error count: %d\n",err,rdata.count,rdata.err_count);
+    printf("r_thread exited with code: %d, read count: %d, error count: %d cont_count: %d \n",err,rdata.count,rdata.err_count,rdata.cont_count);
     
     return 0;
 }

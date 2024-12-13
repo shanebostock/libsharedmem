@@ -60,3 +60,7 @@ void* get_shared_memory(size_t shmem_size){
     }
     return shm;
 }
+
+void clear_shared_memory(void* shm, size_t shmem_size){
+	memset(shm,0,shmem_size);
+}
