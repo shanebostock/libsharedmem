@@ -12,6 +12,7 @@
 #include <errno.h>
 
 
+
 /**************************************************************/
 /*
 
@@ -48,16 +49,17 @@ void* create_shared_memory(size_t shmem_size, int project_id){
 key_t get_key(int project_id){
 
 	char buffer[PATH_BUFF_SIZE];
-    const char* p_buf = buffer;
+	memset((char*)buffer,0,PATH_BUFF_SIZE); // clear buffer
     readlink("/proc/self/exe", buffer, PATH_BUFF_SIZE); // gets file path of the calling proc
-
+	const char* p_buf = buffer; // need a const char* for ftok
 	return ftok(p_buf,project_id);
 }
 
 int get_id_new(size_t shmem_size, key_t project_key){
 	int shmid;
+	int flags = 0;
 
-	if((shmid = shmget(project_key,shmem_size,IPC_CREAT | 0666)) <0){
+	if((shmid = shmget(project_key,shmem_size,flags | IPC_CREAT | 0666)) <0){
  		perror("shmid");
  		exit(1);
  	}
@@ -66,8 +68,9 @@ int get_id_new(size_t shmem_size, key_t project_key){
 
 int get_id(size_t shmem_size, key_t project_key){
 	int shmid;
+	int flags = 0;
 
-	if((shmid = shmget(project_key,shmem_size,0666)) <0){
+	if((shmid = shmget(project_key,shmem_size,flags | 0666)) <0){
  		perror("shmget");
  		exit(1);
  	}
