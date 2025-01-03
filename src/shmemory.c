@@ -25,6 +25,7 @@ union semun { /* Used in calls to semctl() */
 /* helper funcs */
 key_t get_key(int project_id);
 int32_t msleep(uint32_t ms);
+void clear_shared_memory(void* shm, size_t shmem_size);
 
 /* shared memory wrappers */
 int get_id_new(size_t shmem_size, key_t project_key);
@@ -69,12 +70,19 @@ int create_shared_memory(size_t shmem_size, int project_id){
         perror("shmat");
         exit(1);
     }
+	clear_shared_memory(shm, shmem_size);
     return shmid;
 }
 
-void clear_shared_memory(void* shm, size_t shmem_size){
-	memset(shm,0,shmem_size);
+int free_shared_memory(int shmid){
+
+	    if (shmctl(shmid, IPC_RMID, NULL) == -1){
+			perror("shmctl");
+			return -1;
+		}
+        return 0;
 }
+
 /**********************/
 /* SEMAPHORE EXTERNAL */
 int create_sem(uint8_t nsems, int project_id){
@@ -115,6 +123,18 @@ int try_wait(int semid,int semnum){
 	return 0;
 }
 
+int remove_sem_set(int semid){
+
+	union semun dummy;
+    /* when IPC_RMID is called - it removes the whole set the 2nd arg (semnum) is ignored.*/
+    if (semctl(semid, 0, IPC_RMID, dummy) == -1){
+		perror("semctl");
+		return -1;
+	}
+	return 0;
+        
+}
+
 
 /* INTNERAL FUNCS*/
 /* helper funcs */
@@ -139,6 +159,11 @@ int32_t msleep(uint32_t ms){
 
     return res;
 }
+
+void clear_shared_memory(void* shm, size_t shmem_size){
+	memset(shm,0,shmem_size);
+}
+
 /* shared memory wrappers */
 int get_id_new(size_t shmem_size, key_t project_key){
 	int shmid;

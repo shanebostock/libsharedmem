@@ -18,12 +18,7 @@
 #define RB_SEM_ID 1337
 #define SET_VAL 0
 #define TEST_SIZE 100
-union semun { /* Used in calls to semctl() */
-    int                 val;
-    struct semid_ds     *buf;
-    unsigned short      *array;
-    struct seminfo      *__buf;
-};
+
 enum rw_thread {
     READER_E = 0,
     WRITER_E = 1,
@@ -176,7 +171,6 @@ void impl(void){
     ids.semid = create_sem(NUM_SEMS, RB_SEM_ID);
     int err;
     pthread_t r_thread, w_thread;
-    union semun dummy;
 
     // release the reader semaphore
     if(release_sem(ids.semid,READER_E)==-1){
@@ -207,12 +201,11 @@ void impl(void){
         perror("could not join reader thread");
     }
     /* Remove shared memory and semaphore set. */
+    if (free_shared_memory(ids.shmid) == -1)
+        perror("free_shared_memory");
 
-    if (shmctl(ids.shmid, IPC_RMID, NULL) == -1)
-        perror("shmctl");
-    /* when IPC_RMID is called - it removes the whole set the 2nd arg (semnum) is ignored.*/
-    if (semctl(ids.semid, 0, IPC_RMID, dummy) == -1)
-        perror("semctl");
+    if (remove_sem_set(ids.semid) == -1)
+        perror("remove_sem_set");
 }
 
 int main(int argc, char** argv){

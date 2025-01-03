@@ -16,9 +16,8 @@ int create_shared_memory(size_t shmem_size,int project_id);
 void* get_shared_memory(size_t shmem_size,int project_id);
 // get the shared memory segment by shmid
 void* get_shared_memory_by_shmid(int shmid);
-// clear the shared memory
-/* TODO: THIS FUNCTION NEEDS A RETHINK */
-void clear_shared_memory(void* shm,size_t shmem_size);
+/* mark shared memory for deletion */
+int free_shared_memory(int shmid);
 
 //create a new sem set
 int create_sem(uint8_t nsems, int project_id);
@@ -28,5 +27,6 @@ int release_sem(int semid, int semnum);
 int signal_sem(int semid, int semnum);
 // wait for signal
 int try_wait(int semid,int semnum);
-
+/* delete semaphores*/
+int remove_sem_set(int shmid);
 #endif /* SHMEMORY_H */
