@@ -9,20 +9,24 @@ typedef struct shm_sem {
     int shmid;
 } shm_sem_s;
 
-union semun { /* Used in calls to semctl() */
-    int                 val;
-    struct semid_ds     *buf;
-    unsigned short      *array;
-    struct seminfo      *__buf;
-};
-
+// create a new shared memory segment
 int create_shared_memory(size_t shmem_size,int project_id);
+// get the shared memory by size & project id
+/* TODO: THIS FUNCTION NEEDS A RETHINK */
 void* get_shared_memory(size_t shmem_size,int project_id);
+// get the shared memory segment by shmid
 void* get_shared_memory_by_shmid(int shmid);
-key_t get_key(int project_id);
-int get_id_new(size_t shmem_size,key_t project_key);
-int get_id(size_t shmem_size,key_t project_key);
+// clear the shared memory
+/* TODO: THIS FUNCTION NEEDS A RETHINK */
 void clear_shared_memory(void* shm,size_t shmem_size);
 
+//create a new sem set
 int create_sem(uint8_t nsems, int project_id);
+// increment
+int release_sem(int semid, int semnum);
+// decrement
+int signal_sem(int semid, int semnum);
+// wait for signal
+int try_wait(int semid,int semnum);
+
 #endif /* SHMEMORY_H */

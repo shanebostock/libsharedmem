@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
-#include <time.h>
+
 #include <errno.h>
 
 #include <sys/ipc.h>
@@ -16,9 +16,14 @@
 #define NUM_SEMS 2
 #define RB_ID 1312
 #define RB_SEM_ID 1337
-
+#define SET_VAL 0
 #define TEST_SIZE 100
-
+union semun { /* Used in calls to semctl() */
+    int                 val;
+    struct semid_ds     *buf;
+    unsigned short      *array;
+    struct seminfo      *__buf;
+};
 enum rw_thread {
     READER_E = 0,
     WRITER_E = 1,
@@ -35,28 +40,6 @@ typedef struct packet {
 const size_t packet_size = sizeof(packet_s);
 const size_t rb_mem_size = sizeof(packet_s)*RB_ELEMS;
 
-
-
-void p(shm_sem_s* ids){
-    struct sembuf  sop;
-    sop.sem_num = 0;
-    sop.sem_op = -1;
-    sop.sem_flg = 0;
-    if (semop(ids->semid, &sop, 1) == -1){
-        perror("semop");
-    }
-}
-
-void v(shm_sem_s* ids){
-    struct sembuf  sop;
-    sop.sem_num = 0;
-    sop.sem_op = 1;
-    sop.sem_flg = 0;
-    if (semop(ids->semid, &sop, 1) == -1){
-        perror("semop");
-    }
-}
-
 void generate_packet(packet_s *ptr, uint8_t seq){
     ptr->done = 0;
     ptr->seq = seq;
@@ -72,27 +55,10 @@ int test_packet(uint8_t recv_seq, uint8_t expected_seq){
     }
 }
 
-int32_t msleep(uint32_t ms){
-    struct timespec ts;
-    int32_t res;
-    
-    ts.tv_sec = ms/1000;
-    ts.tv_nsec = (ms % 1000) * 1000000;
-    do {
-        res = nanosleep(&ts,&ts);
-    } while (res && errno == EINTR);
-
-    return res;
-}
-
 void* writer_thread0(void* _ids){
     // setup writer thread
     shm_sem_s *ids=(shm_sem_s *)_ids;
-    struct sembuf sop;
-    sop.sem_num = WRITER_E;
-    sop.sem_op = 0; // try wait for zero
-    sop.sem_flg = 0;
-    union semun arg;
+
     packet_s new_packet;
     packet_s *p_new_packet = &new_packet;
 
@@ -104,8 +70,8 @@ void* writer_thread0(void* _ids){
     
     do {
         //aquire semaphore
-        if(semop(ids->semid,&sop,1) == -1){
-            perror("semop, try_wait, writer");
+        if(try_wait(ids->semid,WRITER_E) == -1){
+            perror("try_wait");
             exit(1);
         }
         // recv packets
@@ -117,18 +83,16 @@ void* writer_thread0(void* _ids){
             // increment the pointers to write next
         }
         num_packets_written+=1;
-        // release semaphore
-        arg.val=1;
-        if(semctl(ids->semid,WRITER_E,SETVAL,arg)==-1){
-            perror("semctl");
+        /* release the writer sem */
+        if(release_sem(ids->semid,WRITER_E)==-1){
+            perror("release_sem");
             exit(1);
         }
-        // signal reader
-        arg.val = 0;
-        if(semctl(ids->semid,READER_E,SETVAL,arg)==-1){
-            perror("semctl");
+        /* signal the reader sem */
+        if(signal_sem(ids->semid,READER_E)==-1){
+            perror("signal_sem");
             exit(1);
-        }        
+        }       
     } while(num_packets_written < TEST_SIZE);
     pthread_exit(NULL);
 }
@@ -136,11 +100,6 @@ void* writer_thread0(void* _ids){
 void* reader_thread1(void* _ids){
     // setup
     shm_sem_s *ids=(shm_sem_s *)_ids;
-    struct sembuf sop;
-    sop.sem_num = READER_E;
-    sop.sem_op = 0; // try wait for zero
-    sop.sem_flg = 0;
-    union semun arg;
     packet_s new_packet;
     packet_s *p_new_packet = &new_packet;
 
@@ -156,25 +115,22 @@ void* reader_thread1(void* _ids){
 
     do {
         //aquire semaphore
-        if(semop(ids->semid,&sop,1) == -1){
-            perror("semop, try_wait, writer");
+        if(try_wait(ids->semid,READER_E) == -1){
+            perror("try_wait");
             exit(1);
         }
         // read packets
         if(reader->done != 0){
             writer_fails+=1;
             perror("writer incomplete");
-
-            // release semaphore
-            arg.val=1;
-            if(semctl(ids->semid,READER_E,SETVAL,arg)==-1){
-                perror("semctl");
+            /*release the reader sem */
+            if(release_sem(ids->semid,READER_E)==-1){
+                perror("release_sem");
                 exit(1);
             }
-            // signal writer
-            arg.val = 0;
-            if(semctl(ids->semid,WRITER_E,SETVAL,arg)==-1){
-                perror("semctl");
+            /* signal the writer sem */
+            if(signal_sem(ids->semid,WRITER_E)==-1){
+                perror("signal_sem");
                 exit(1);
             }
             continue;  
@@ -195,19 +151,17 @@ void* reader_thread1(void* _ids){
         if(packet_size != rb_mem_size){
             // increment the pointers to read next
         }
-        // release semaphore
-        arg.val=1;
-        if(semctl(ids->semid,READER_E,SETVAL,arg)==-1){
-            perror("semctl");
+        /*release the reader sem */
+        if(release_sem(ids->semid,READER_E)==-1){
+            perror("release_sem");
             exit(1);
         }
-        
-        // signal writer
-        arg.val = 0;
-        if(semctl(ids->semid,WRITER_E,SETVAL,arg)==-1){
-            perror("semctl");
+        /* signal the writer sem */
+        if(signal_sem(ids->semid,WRITER_E)==-1){
+            perror("signal_sem");
             exit(1);
-        }        
+        }
+      
     } while((num_packets_read < TEST_SIZE) && (writer_fails < 2));
     printf("total errors: seq: %d, writer_fails: %d\n", err_count, writer_fails);
     pthread_exit(NULL);
@@ -222,18 +176,16 @@ void impl(void){
     ids.semid = create_sem(NUM_SEMS, RB_SEM_ID);
     int err;
     pthread_t r_thread, w_thread;
-    union semun arg, dummy;
-    
-    // initialize the reader thread semaphore to 1
-    arg.val = 1;
-    if(semctl(ids.semid,READER_E,SETVAL,arg)==-1){
-        perror("semctl");
+    union semun dummy;
+
+    // release the reader semaphore
+    if(release_sem(ids.semid,READER_E)==-1){
+        perror("release_sem");
         exit(1);
     }
-    // initialize the writer thread semaphore to 0
-    arg.val=0;
-    if(semctl(ids.semid,WRITER_E,SETVAL,arg)==-1){
-        perror("semctl");
+    // signal the writer thread to go first
+    if(signal_sem(ids.semid,WRITER_E)==-1){
+        perror("signal_sem");
         exit(1);
     }
 
