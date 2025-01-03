@@ -1,4 +1,4 @@
 # libsharedmem
-a C. shared memory utility
+a C shared memory and data structures utility
 
 
