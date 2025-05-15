@@ -30,7 +30,7 @@ void clear_shared_memory(void* shm, size_t shmem_size);
 /* shared memory wrappers */
 int get_id_new(size_t shmem_size, key_t project_key);
 int get_id(size_t shmem_size, key_t project_key);
-
+int get_shmid_ds(int shmid, struct shmid_ds* buf);
 /* semaphore wrappers */
 int update_sem(int semid, int semnum, union semun arg);
 
@@ -38,7 +38,9 @@ int update_sem(int semid, int semnum, union semun arg);
 /**********************/
 /* SHARED MEMORY EXTERNAL */
 void* get_shared_memory(size_t shmem_size, int project_id){
-
+	/* this function for sharing shm between parent/child processes 
+	   it could be modified for all process but would require a refactor
+	   of the get_key function. */
 	key_t project_key = get_key(project_id);
 	int shmid = get_id(shmem_size,project_key);
 	void *shm;
@@ -62,7 +64,14 @@ void* get_shared_memory_by_shmid(int shmid){
 
 int create_shared_memory(size_t shmem_size, int project_id){
 	
-	key_t project_key = get_key(project_id);
+	key_t project_key;
+	if(project_id != IPC_PRIVATE){
+		/* if its not private then generate a key */
+		project_key = get_key(project_id);
+	}
+	else{
+		project_key = (key_t)project_id;
+	}
 	int shmid = get_id_new(shmem_size,project_key);
 	void *shm;
 	
@@ -74,20 +83,45 @@ int create_shared_memory(size_t shmem_size, int project_id){
     return shmid;
 }
 
-int free_shared_memory(int shmid){
 
-	    if (shmctl(shmid, IPC_RMID, NULL) == -1){
-			perror("shmctl");
-			return -1;
-		}
-        return 0;
+
+int free_shared_memory(int shmid){
+	/* get the size of the shared memory segment */
+	struct shmid_ds buf;
+
+	if(get_shmid_ds(shmid, &buf) == -1){
+		perror("get_shmid_ds");
+		return -1;
+	}
+
+	/* get a pointer to the shared memory segment */
+	void* shm = get_shared_memory_by_shmid(shmid);
+
+	/* delete the contents of the shared memory */
+	clear_shared_memory(shm, buf.shm_segsz);
+
+	/* remove the shared memory segement*/
+	if (shmctl(shmid, IPC_RMID, NULL) == -1){
+		perror("shmctl");
+		return -1;
+	}
+	return 0;
 }
 
 /**********************/
 /* SEMAPHORE EXTERNAL */
 int create_sem(uint8_t nsems, int project_id){
+
+	key_t project_key;
+	if(project_id != IPC_PRIVATE){
+		/* if its not private then generate a key */
+		project_key = get_key(project_id);
+	}
+	else{
+		project_key = (key_t)project_id;
+	}
+
     int id = 0;
-    key_t project_key = get_key(project_id);
     id = semget(project_key, nsems, IPC_CREAT | 0600);
     if (id == -1){
         perror("semget");
@@ -185,6 +219,15 @@ int get_id(size_t shmem_size, key_t project_key){
  		exit(1);
  	}
  	return shmid;
+}
+
+int get_shmid_ds(int shmid, struct shmid_ds* buf){
+
+	if (shmctl(shmid, IPC_STAT, buf) == -1){
+		perror("shmctl");
+		return -1;
+	}
+	return 0;
 }
 /* semaphore wrappers */
 int update_sem(int semid, int semnum, union semun arg){
