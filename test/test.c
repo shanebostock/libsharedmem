@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
+#include <unistd.h>
 
 #include <errno.h>
 
@@ -12,7 +13,7 @@
 #include <sys/sem.h>
 #include <sys/shm.h>
 
-#define RB_ELEMS 1
+#define RB_ELEMS 3
 #define NUM_SEMS 2
 #define RB_ID 1312
 #define RB_SEM_ID 1337
@@ -33,6 +34,7 @@ typedef struct packet {
 } packet_s;
 
 const size_t packet_size = sizeof(packet_s);
+const size_t val_size = sizeof(uint8_t);
 const size_t rb_mem_size = sizeof(packet_s)*RB_ELEMS;
 
 void generate_packet(packet_s *ptr, uint8_t seq){
@@ -208,9 +210,108 @@ void impl(void){
         perror("remove_sem_set");
 }
 
+void* reader_thread2(void* _ids){
+    shm_sem_s *ids=(shm_sem_s *)_ids;
+    uint8_t cur_val;
+    uint8_t *p_cur_val = &cur_val;
+
+    uint8_t *rb_addr = (uint8_t*)get_shared_memory_by_shmid(ids->shmid);
+    uint8_t *reader = rb_addr;
+    while(1){
+        sleep(6);
+        if(try_wait(ids->semid,0) == -1){
+            perror("try_wait");
+            exit(1);
+        }
+
+        memcpy(p_cur_val,reader,val_size);
+        if(cur_val!=0){
+            memset(reader,0,val_size);
+            printf("dog ate\n");
+        }
+
+        else { /* if there is no cookie - exit loop */
+            break;
+        }
+
+        if(release_sem(ids->semid,0)==-1){
+            perror("release_sem");
+            exit(1);
+        }
+        if(signal_sem(ids->semid,0)==-1){
+            perror("signal_sem");
+            exit(1);
+        }
+    }
+    printf("dog starved\n");
+    pthread_exit(NULL);
+}
+
+void impl2(void){
+    shm_sem_s ids;
+    
+    // id for the ring buffer
+    ids.shmid = create_shared_memory(rb_mem_size,RB_ID);
+    // id for the semaphore set
+    ids.semid = create_sem(1, RB_SEM_ID);
+    int err;
+    pthread_t r_thread;
+
+    // release the reader semaphore
+    if(release_sem(ids.semid,0)==-1){
+        perror("release_sem");
+        exit(1);
+    }
+    if(signal_sem(ids.semid,0)==-1){
+        perror("signal_sem");
+        exit(1);
+    }
+    err = pthread_create(&r_thread,NULL,reader_thread2,(void*)&ids);
+    if (err !=0){
+        perror("could not create thread");
+    }
+
+
+    uint8_t *rb_addr = (uint8_t*)get_shared_memory_by_shmid(ids.shmid);
+    uint8_t *reader = rb_addr;
+    uint8_t loop_counter = 0;
+    do{
+        sleep(2);
+        if(try_wait(ids.semid,0) == -1){
+            perror("try_wait");
+            exit(1);
+        }
+        printf("feed dog\n");
+        memset(reader,1,val_size);
+
+        if(release_sem(ids.semid,0)==-1){
+            perror("release_sem");
+            exit(1);
+        }
+        if(signal_sem(ids.semid,0)==-1){
+            perror("signal_sem");
+            exit(1);
+        }
+        loop_counter+=1;
+    } while(loop_counter < 4);
+    printf("main loop exited - dog will starve\n");
+
+    err = pthread_join(r_thread,NULL);
+    if (err !=0){
+        perror("could not join reader thread");
+    }
+    /* Remove shared memory and semaphore set. */
+    if (free_shared_memory(ids.shmid) == -1)
+        perror("free_shared_memory");
+
+    if (remove_sem_set(ids.semid) == -1)
+        perror("remove_sem_set");
+}
+
 int main(int argc, char** argv){
 
-    impl();
+    // impl();
+    impl2();
 
     return 0;
 }
