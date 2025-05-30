@@ -1,4 +1,5 @@
 #include <shmemory.h>
+#include <queue.h>
 
 #include <stdint.h>
 #include <stdio.h>
@@ -208,9 +209,39 @@ void impl(void){
         perror("remove_sem_set");
 }
 
+typedef struct {
+    int num;
+    int val;
+} data_s;
+
+void data_impl(){
+    Queue q;
+    data_s data;
+    init_queue(&q);
+
+    q.num_ele = 3;
+    q.ele_size = sizeof(data_s);
+    q.data = (data_s*)malloc(q.num_ele*q.ele_size);
+    
+    for (int i=0; i<q.num_ele; i++){
+        data.num = i;
+        data.val = 10+i;
+        enqueue(&q, (void*)&data);
+    }
+
+    for (int i=0; i<q.num_ele; i++){
+        dequeue(&q, (void*)&data);
+        printf("Dequeued: num=%d, val=%d\n", data.num, data.val);
+    }
+    printf("front: %d, rear: %d, count: %d\n", q.front, q.rear, q.count);
+    free(q.data);
+
+}
+
 int main(int argc, char** argv){
 
-    impl();
+    // impl();
+    data_impl();
 
     return 0;
 }
