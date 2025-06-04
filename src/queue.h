@@ -1,6 +1,8 @@
 #ifndef QUEUE_H
 #define QUEUE_H
 
+#include <stdlib.h>
+#include <stdint.h>
 
 typedef struct {
     uint32_t num_ele;
